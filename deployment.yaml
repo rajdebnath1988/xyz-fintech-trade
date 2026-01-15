@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: daman-trade-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: daman-trade
+  template:
+    metadata:
+      labels:
+        app: daman-trade
+    spec:
+      containers:
+      - name: trade-container
+        image: IMAGE_PLACEHOLDER
+        ports:
+        - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: daman-trade-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: daman-trade
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
