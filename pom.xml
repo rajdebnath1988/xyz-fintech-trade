@@ -25,8 +25,6 @@
     <sonar.projectKey>daman-trade-engine</sonar.projectKey>
     <sonar.organization>daman-markets</sonar.organization>
     <sonar.host.url>https://sonarcloud.io</sonar.host.url>
-
-    <!-- Optional but recommended -->
     <sonar.java.source>17</sonar.java.source>
   </properties>
 
@@ -71,13 +69,19 @@
         <version>5.5.0.6356</version>
       </plugin>
 
-      <!-- OWASP Dependency Check -->
+      <!-- OWASP Dependency Check (CI-safe) -->
       <plugin>
         <groupId>org.owasp</groupId>
         <artifactId>dependency-check-maven</artifactId>
         <version>11.1.0</version>
         <configuration>
           <failOnError>false</failOnError>
+
+          <!-- Prevent NVD CVSS v4 parsing failures -->
+          <autoUpdate>false</autoUpdate>
+
+          <!-- Use cached NVD data (7 days) -->
+          <nvdValidForHours>168</nvdValidForHours>
         </configuration>
         <executions>
           <execution>
