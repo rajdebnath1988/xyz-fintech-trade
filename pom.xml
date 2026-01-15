@@ -21,9 +21,9 @@
   <properties>
     <java.version>17</java.version>
 
-    <!-- SonarCloud configuration -->
-    <sonar.projectKey>xyz-fintech-trade</sonar.projectKey>
-    <sonar.organization>daman-markets</sonar.organization>
+    <!-- SonarCloud (MUST MATCH UI EXACTLY) -->
+    <sonar.projectKey>rajdebnath1988_xyz-fintech-trade</sonar.projectKey>
+    <sonar.organization>rajdebnath1988</sonar.organization>
     <sonar.host.url>https://sonarcloud.io</sonar.host.url>
     <sonar.java.source>17</sonar.java.source>
   </properties>
@@ -76,11 +76,9 @@
         <version>11.1.0</version>
         <configuration>
           <failOnError>false</failOnError>
-
-          <!-- Prevent NVD CVSS v4 parsing failures -->
+          <!-- Prevent NVD CVSS v4 failures -->
           <autoUpdate>false</autoUpdate>
-
-          <!-- Use cached NVD data (7 days) -->
+          <!-- Use cached data (7 days) -->
           <nvdValidForHours>168</nvdValidForHours>
         </configuration>
         <executions>
