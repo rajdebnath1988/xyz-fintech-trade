@@ -1,9 +1,8 @@
-name: Daman Markets Pipeline
+name: Daman Markets Fintech Pipeline
 
 on:
   push:
     branches: [ "main" ]
-  workflow_dispatch:      # Allows you to click "Run Workflow" manually
 
 env:
   AWS_REGION: us-east-1
@@ -11,8 +10,10 @@ env:
   EKS_CLUSTER_NAME: daman-cluster
 
 jobs:
-  build-deploy:
+  build-and-test:
+    name: Build & Security Scan
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
@@ -21,12 +22,69 @@ jobs:
         uses: actions/setup-java@v3
         with:
           java-version: '17'
-          distribution: 'corretto'
+          distribution: 'temurin'
+          cache: maven
 
-      - name: Build with Maven (Fast Mode)
-        # We use 'package' to skip the 'verify' phase (which triggers the slow security scan)
-        # We use '-DskipTests' to skip unit tests for speed
+      # =========================
+      # SonarCloud Code Analysis
+      # =========================
+      - name: SonarCloud Scan (Code Quality)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: mvn -B verify sonar:sonar
+
+      # =========================
+      # OWASP Dependency Check
+      # =========================
+      - name: OWASP Dependency Check (SCA)
+        run: mvn dependency-check:check
+
+      # =========================
+      # Build Application
+      # =========================
+      - name: Build with Maven
         run: mvn clean package -DskipTests
+
+      # =========================
+      # AWS ECR
+      # =========================
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ env.AWS_REGION }}
+
+      - name: Build, Tag, and Push Image to ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+      # =========================
+      # Trivy Image Scan
+      # =========================
+      - name: Trivy Container Scan (Image Security)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}'
+          format: 'table'
+          exit-code: '0'     # Change to 1 for prod
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'
+
+  deploy:
+    name: Deploy to EKS
+    needs: build-and-test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
@@ -35,31 +93,40 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Login to Amazon ECR
+      - name: Update KubeConfig
+        run: aws eks update-kubeconfig \
+             --name ${{ env.EKS_CLUSTER_NAME }} \
+             --region ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
 
-      - name: Build and Push Docker Image
+      - name: Deploy to Kubernetes
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-
-      - name: Update KubeConfig
-        run: aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
-
-      - name: Deploy to EKS
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          # Replace placeholder with actual image in deployment.yaml
           sed -i "s|IMAGE_PLACEHOLDER|$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG|g" deployment.yaml
-          
-          # Deploy
           kubectl apply -f deployment.yaml
-          
-          # Force restart to pick up new image immediately
-          kubectl rollout restart deployment/daman-trade-app
+
+  notify:
+    name: Notification
+    needs: [deploy]
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send Email Notification
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: Daman Trade Deployment Status - ${{ job.status }}
+          body: |
+            The deployment of Daman Trade Engine finished with status: ${{ job.status }}.
+            Please check GitHub Actions logs for details.
+          to: raj.debnath1988@gmail.com
+          from: DevOps Pipeline
