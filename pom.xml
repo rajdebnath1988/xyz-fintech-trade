@@ -22,7 +22,7 @@
     <java.version>17</java.version>
 
     <!-- SonarCloud configuration -->
-    <sonar.projectKey>daman-trade-engine</sonar.projectKey>
+    <sonar.projectKey>xyz-fintech-trade</sonar.projectKey>
     <sonar.organization>daman-markets</sonar.organization>
     <sonar.host.url>https://sonarcloud.io</sonar.host.url>
     <sonar.java.source>17</sonar.java.source>
